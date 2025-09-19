@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roblox Admin Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js" type="module"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .shake {
+            animation: shake 0.5s;
+        }
+
+        @keyframes shake {
+            0%, 100% {
+                transform: translateX(0);
+            }
+            10%, 30%, 50%, 70%, 90% {
+                transform: translateX(-5px);
+            }
+            20%, 40%, 60%, 80% {
+                transform: translateX(5px);
+            }
+        }
+    </style>
+</head>
+<body class="bg-[#131314] text-gray-300 flex min-h-screen">
+    
+    <!-- Sidebar -->
+    <div id="sidebar" class="w-64 bg-[#1E1E1E] p-6 flex flex-col items-center hidden transition-transform duration-300">
+        <!-- User Profile -->
+        <div class="flex items-center space-x-3 mb-8 mt-4">
+            <img id="user-pfp" class="w-12 h-12 rounded-full ring-2 ring-gray-600" src="https://placehold.co/48x48/1E1E1E/94a3b8?text=PFP" alt="User PFP">
+            <div>
+                <p id="user-username" class="text-lg font-semibold text-gray-100">Loading...</p>
+                <p id="auth-status" class="text-xs text-yellow-400">Authenticating...</p>
+            </div>
+        </div>
+        
+        <nav class="w-full space-y-2">
+            <button id="nav-ban" class="nav-item w-full text-left py-3 px-4 rounded-lg font-medium text-gray-300 hover:bg-gray-700 transition-colors duration-200 bg-gray-700">Ban</button>
+            <button id="nav-warn" class="nav-item w-full text-left py-3 px-4 rounded-lg font-medium text-gray-300 hover:bg-gray-700 transition-colors duration-200">Warn</button>
+            <button id="nav-unban" class="nav-item w-full text-left py-3 px-4 rounded-lg font-medium text-gray-300 hover:bg-gray-700 transition-colors duration-200">Unban</button>
+            <button id="nav-appeals" class="nav-item w-full text-left py-3 px-4 rounded-lg font-medium text-gray-300 hover:bg-gray-700 transition-colors duration-200">Appeals</button>
+            <button id="nav-lookup" class="nav-item w-full text-left py-3 px-4 rounded-lg font-medium text-gray-300 hover:bg-gray-700 transition-colors duration-200">Lookup a player</button>
+            <button id="nav-manage-data" class="nav-item w-full text-left py-3 px-4 rounded-lg font-medium text-gray-300 hover:bg-gray-700 transition-colors duration-200">Manage Data</button>
+        </nav>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 p-8 overflow-y-auto flex items-center justify-center">
+
+        <!-- Welcome Panel -->
+        <div id="panel-welcome" class="text-center transform transition-all duration-500">
+            <h1 id="welcome-message" class="text-5xl font-bold text-gray-100 mb-8">Welcome, Loading...</h1>
+            <button id="open-panel-button" class="px-8 py-4 rounded-full text-white font-semibold text-lg transition-colors duration-200 shadow-lg bg-blue-600 hover:bg-blue-700 hover:shadow-xl hover:shadow-blue-500/50">
+                Open Panel
+            </button>
+        </div>
+
+        <!-- Admin Panel -->
+        <div id="panel-admin" class="hidden w-full max-w-2xl transition-all duration-300">
+            <div class="bg-[#1E1E1E] p-8 rounded-xl shadow-2xl w-full mx-auto transform transition-all duration-300">
+                <div id="message-container" class="mt-4 text-center text-sm"></div>
+
+                <!-- Ban Panel -->
+                <div id="panel-ban" class="panel">
+                    <h1 class="text-3xl font-bold text-gray-100 mb-6">Ban a user</h1>
+                    <form id="ban-form" class="space-y-6">
+                        <!-- Username and Roblox ID -->
+                        <div class="flex flex-col md:flex-row md:space-x-4 space-y-4 md:space-y-0">
+                            <div class="flex-1">
+                                <label for="banUsername" class="block text-sm font-medium mb-1 text-gray-400">Roblox Username</label>
+                                <input type="text" id="banUsername" name="username" placeholder="SquishyXBravo" required 
+                                    class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200">
+                            </div>
+                            <div class="flex-1">
+                                <label for="banRobloxId" class="block text-sm font-medium mb-1 text-gray-400">Roblox ID</label>
+                                <input type="text" id="banRobloxId" name="robloxId" placeholder="920915908"
+                                    class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 text-gray-300">
+                                <p class="text-xs text-gray-400 mt-1">Username populated from ID search.</p>
+                            </div>
+                        </div>
+
+                        <!-- Reason -->
+                        <div>
+                            <label for="banReasonSelect" class="block text-sm font-medium mb-1 text-gray-400">Reason</label>
+                            <select id="banReasonSelect" name="reason" required class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 text-gray-300">
+                                <option value="" disabled selected>Select a reason...</option>
+                                <option value="Exploiting">Exploiting</option>
+                                <option value="Inappropriate Content">Inappropriate Content</option>
+                                <option value="Staff Impersonation">Staff Impersonation</option>
+                                <option value="Custom">Custom</option>
+                            </select>
+                            <input type="text" id="banCustomReason" placeholder="Enter custom reason..." class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 mt-2 hidden">
+                        </div>
+
+                        <!-- Notes -->
+                        <div>
+                            <label for="banNotes" class="block text-sm font-medium mb-1 text-gray-400">Notes</label>
+                            <textarea type="text" id="banNotes" name="notes" rows="4" placeholder="This is internal and only shown to staff."
+                                    class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"></textarea>
+                        </div>
+                        
+                        <!-- Ban Length -->
+                        <div>
+                            <label for="banLengthSelect" class="block text-sm font-medium mb-1 text-gray-400">Ban Length</label>
+                            <select id="banLengthSelect" name="banLength" required class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 text-gray-300">
+                                <option value="" disabled selected>Select a length...</option>
+                                <option value="Permanent">Permanent</option>
+                                <option value="1 month">1 month</option>
+                                <option value="5 months">5 months</option>
+                                <option value="1 year">1 year</option>
+                                <option value="Custom">Custom</option>
+                            </select>
+                            <input type="text" id="banCustomLength" placeholder="Enter custom length..." class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 mt-2 hidden">
+                        </div>
+
+                        <!-- Alt account checkbox -->
+                        <div class="flex items-center space-x-2">
+                            <input type="checkbox" id="banAlts" name="banAlts"
+                                class="h-4 w-4 text-blue-600 bg-[#1E1E1E] rounded border-gray-600 focus:ring-blue-500">
+                            <label for="banAlts" class="text-sm font-medium text-gray-400">Ban all possible alt accounts using Roblox Ban API</label>
+                        </div>
+
+                        <button type="submit" id="ban-button"
+                                class="w-full border-2 border-transparent py-2 rounded-lg text-lg font-bold hover:bg-blue-600 transition-colors duration-200 focus:outline-none text-center bg-gray-700 text-blue-500 hover:text-white">
+                            BAN
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Warn Panel -->
+                <div id="panel-warn" class="panel hidden">
+                    <h1 class="text-3xl font-bold text-gray-100 mb-6">Warn a user</h1>
+                    <form id="warn-form" class="space-y-6">
+                        <!-- Username and Roblox ID -->
+                        <div class="flex flex-col md:flex-row md:space-x-4 space-y-4 md:space-y-0">
+                            <div class="flex-1">
+                                <label for="warnUsername" class="block text-sm font-medium mb-1 text-gray-400">Roblox Username</label>
+                                <input type="text" id="warnUsername" name="username" placeholder="SquishyXBravo" required 
+                                    class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200">
+                            </div>
+                            <div class="flex-1">
+                                <label for="warnRobloxId" class="block text-sm font-medium mb-1 text-gray-400">Roblox ID</label>
+                                <input type="text" id="warnRobloxId" name="robloxId" placeholder="920915908"
+                                    class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 text-gray-300">
+                                <p class="text-xs text-gray-400 mt-1">Username populated from ID search.</p>
+                            </div>
+                        </div>
+
+                        <!-- Reason -->
+                        <div>
+                            <label for="warnReasonSelect" class="block text-sm font-medium mb-1 text-gray-400">Reason</label>
+                            <select id="warnReasonSelect" name="reason" required class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 text-gray-300">
+                                <option value="" disabled selected>Select a reason...</option>
+                                <option value="Exploiting">Exploiting</option>
+                                <option value="Inappropriate Content">Inappropriate Content</option>
+                                <option value="Staff Impersonation">Staff Impersonation</option>
+                                <option value="Custom">Custom</option>
+                            </select>
+                            <input type="text" id="warnCustomReason" placeholder="Enter custom reason..." class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 mt-2 hidden">
+                        </div>
+
+                        <!-- Notes -->
+                        <div>
+                            <label for="warnNotes" class="block text-sm font-medium mb-1 text-gray-400">Notes</label>
+                            <textarea type="text" id="warnNotes" name="notes" rows="4" placeholder="This is internal and only shown to staff."
+                                    class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"></textarea>
+                        </div>
+                        
+                        <button type="submit" id="warn-button"
+                                class="w-full border-2 border-transparent py-2 rounded-lg text-lg font-bold hover:bg-blue-600 transition-colors duration-200 focus:outline-none text-center bg-gray-700 text-blue-500 hover:text-white">
+                            WARN
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Unban Panel -->
+                <div id="panel-unban" class="panel hidden">
+                    <h1 class="text-3xl font-bold text-gray-100 mb-6">Unban a user</h1>
+                    <form id="unban-form" class="space-y-6">
+                        <!-- Username and Roblox ID -->
+                        <div class="flex flex-col md:flex-row md:space-x-4 space-y-4 md:space-y-0">
+                            <div class="flex-1">
+                                <label for="unbanUsername" class="block text-sm font-medium mb-1 text-gray-400">Roblox Username</label>
+                                <input type="text" id="unbanUsername" name="username" placeholder="SquishyXBravo" required 
+                                    class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200">
+                            </div>
+                            <div class="flex-1">
+                                <label for="unbanRobloxId" class="block text-sm font-medium mb-1 text-gray-400">Roblox ID</label>
+                                <input type="text" id="unbanRobloxId" name="robloxId" placeholder="920915908"
+                                    class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 text-gray-300">
+                                <p class="text-xs text-gray-400 mt-1">Username populated from ID search.</p>
+                            </div>
+                        </div>
+
+                        <!-- Past Moderation History -->
+                        <div>
+                            <label class="block text-sm font-medium mb-1 text-gray-400">Past Moderation History</label>
+                            <div id="unban-moderation-history" class="bg-[#282828] p-4 rounded-lg min-h-[100px] overflow-y-auto max-h-[300px] space-y-2">
+                                <p class="text-center text-gray-500 italic">Enter a Roblox ID to view moderation history.</p>
+                            </div>
+                        </div>
+
+                        <!-- Unban Reason -->
+                        <div>
+                            <label for="unbanReason" class="block text-sm font-medium mb-1 text-gray-400">Reason for Unban</label>
+                            <textarea type="text" id="unbanReason" name="unbanReason" rows="4" placeholder="Explain why the user is being unbanned." required
+                                    class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200"></textarea>
+                        </div>
+                        
+                        <button type="submit" id="unban-button"
+                                class="w-full border-2 border-transparent py-2 rounded-lg text-lg font-bold hover:bg-blue-600 transition-colors duration-200 focus:outline-none text-center bg-gray-700 text-blue-500 hover:text-white">
+                            UNBAN
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Appeals Panel -->
+                <div id="panel-appeals" class="panel hidden">
+                    <h1 class="text-3xl font-bold text-gray-100 mb-6">Appeals</h1>
+                    <div id="appeals-container" class="space-y-6">
+                        <!-- Appeals will be loaded here -->
+                    </div>
+                </div>
+
+                <!-- Player Lookup Panel (Hidden by default) -->
+                <div id="panel-lookup" class="panel hidden">
+                    <h1 class="text-3xl font-bold text-gray-100 mb-6">Lookup a player</h1>
+                    <form id="lookup-form" class="space-y-6 mb-8">
+                        <div class="flex flex-col md:flex-row md:space-x-4 space-y-4 md:space-y-0">
+                            <div class="flex-1">
+                                <label for="lookupUsername" class="block text-sm font-medium mb-1 text-gray-400">Roblox Username</label>
+                                <input type="text" id="lookupUsername" name="username" placeholder="SquishyXBravo" required
+                                    class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200">
+                            </div>
+                            <div class="flex-1">
+                                <label for="lookupRobloxId" class="block text-sm font-medium mb-1 text-gray-400">Roblox ID</label>
+                                <input type="text" id="lookupRobloxId" name="robloxId" placeholder="920915908"
+                                    class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200">
+                                <p class="text-xs text-gray-400 mt-1">Leave blank to look up by username.</p>
+                            </div>
+                        </div>
+                        <button type="submit" id="lookup-button"
+                                class="w-full border-2 border-transparent py-2 rounded-lg text-lg font-bold hover:bg-blue-600 transition-colors duration-200 focus:outline-none text-center bg-gray-700 text-blue-500 hover:text-white">
+                            LOOK UP
+                        </button>
+                    </form>
+                    
+                    <div id="lookup-results" class="space-y-6">
+                        <!-- Results will be dynamically populated here -->
+                    </div>
+                </div>
+
+                <!-- Manage Data Panel -->
+                <div id="panel-manage-data" class="panel hidden">
+                    <h1 class="text-3xl font-bold text-gray-100 mb-6">Manage Player Data</h1>
+                    <form id="manage-data-form" class="space-y-6">
+                        <!-- Username and Roblox ID -->
+                        <div class="flex flex-col md:flex-row md:space-x-4 space-y-4 md:space-y-0">
+                            <div class="flex-1">
+                                <label for="manageUsername" class="block text-sm font-medium mb-1 text-gray-400">Roblox Username</label>
+                                <input type="text" id="manageUsername" name="username" placeholder="SquishyXBravo" required 
+                                    class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200">
+                            </div>
+                            <div class="flex-1">
+                                <label for="manageRobloxId" class="block text-sm font-medium mb-1 text-gray-400">Roblox ID</label>
+                                <input type="text" id="manageRobloxId" name="robloxId" placeholder="920915908"
+                                    class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 text-gray-300">
+                                <p class="text-xs text-gray-400 mt-1">Username populated from ID search.</p>
+                            </div>
+                        </div>
+
+                        <!-- Data Type and Amount -->
+                        <div class="flex flex-col md:flex-row md:space-x-4 space-y-4 md:space-y-0">
+                            <div class="flex-1">
+                                <label for="dataType" class="block text-sm font-medium mb-1 text-gray-400">Data Type</label>
+                                <select id="dataType" name="dataType" required class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 text-gray-300">
+                                    <option value="Money">Money</option>
+                                    <option value="XP">XP</option>
+                                </select>
+                            </div>
+                            <div class="flex-1">
+                                <label for="dataAmount" class="block text-sm font-medium mb-1 text-gray-400">Amount</label>
+                                <input type="number" id="dataAmount" name="dataAmount" placeholder="100" required 
+                                    class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200">
+                            </div>
+                        </div>
+
+                        <!-- Action (Give/Take) -->
+                        <div>
+                            <label for="dataAction" class="block text-sm font-medium mb-1 text-gray-400">Action</label>
+                            <select id="dataAction" name="dataAction" required class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 text-gray-300">
+                                <option value="Give">Give</option>
+                                <option value="Take">Take</option>
+                            </select>
+                        </div>
+
+                        <button type="submit" id="manage-data-button"
+                                class="w-full border-2 border-transparent py-2 rounded-lg text-lg font-bold hover:bg-blue-600 transition-colors duration-200 focus:outline-none text-center bg-gray-700 text-blue-500 hover:text-white">
+                            MANAGE DATA
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals for messages and deny reason -->
+    <div id="modal-container" class="fixed inset-0 z-50 flex items-center justify-center p-4 hidden">
+        <div class="fixed inset-0 bg-black opacity-50"></div>
+        <div id="modal-content" class="bg-[#1E1E1E] p-6 rounded-lg shadow-xl w-full max-w-sm z-10">
+            <h3 id="modal-title" class="text-xl font-bold mb-4 text-gray-100">Modal Title</h3>
+            <p id="modal-message" class="text-gray-400 mb-4"></p>
+            <textarea id="modal-input" class="w-full px-4 py-2 bg-[#282828] rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors duration-200 mb-4 hidden" rows="3" placeholder="Enter reason"></textarea>
+            <div class="flex justify-end space-x-2">
+                <button id="modal-cancel-button" class="px-4 py-2 bg-gray-600 rounded-lg text-white hover:bg-gray-700 transition-colors duration-200">Cancel</button>
+                <button id="modal-confirm-button" class="px-4 py-2 bg-blue-600 rounded-lg text-white hover:bg-blue-700 transition-colors duration-200">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, doc, setDoc, updateDoc, onSnapshot, query, where, getDocs, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // setLogLevel('Debug');
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db, auth;
+        const sidebar = document.getElementById('sidebar');
+        const userUsernameEl = document.getElementById('user-username');
+        const authStatusEl = document.getElementById('auth-status');
+        const userPfpEl = document.getElementById('user-pfp');
+
+        const panelWelcome = document.getElementById('panel-welcome');
+        const welcomeMessageEl = document.getElementById('welcome-message');
+        const openPanelButton = document.getElementById('open-panel-button');
+        const panelAdmin = document.getElementById('panel-admin');
+        const panels = document.querySelectorAll('.panel');
+
+        const banForm = document.getElementById('ban-form');
+        const warnForm = document.getElementById('warn-form');
+        const unbanForm = document.getElementById('unban-form');
+        const lookupForm = document.getElementById('lookup-form');
+        const manageDataForm = document.getElementById('manage-data-form');
+        const messageContainer = document.getElementById('message-container');
+        const lookupResultsEl = document.getElementById('lookup-results');
+        const appealsContainer = document.getElementById('appeals-container');
+        const unbanModerationHistoryEl = document.getElementById('unban-moderation-history');
+
+        const modalContainer = document.getElementById('modal-container');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const modalInput = document.getElementById('modal-input');
+        const modalConfirmButton = document.getElementById('modal-confirm-button');
+        const modalCancelButton = document.getElementById('modal-cancel-button');
+
+        const navButtons = document.querySelectorAll('.nav-item');
+
+        const mockRobloxIds = {
+            'squishyxbravo': '920915908',
+            'johnsmith': '123456789',
+            'janedoe': '987654321'
+        };
+
+        // Event listeners for showing/hiding custom input fields
+        document.getElementById('banReasonSelect').addEventListener('change', (e) => {
+            const customInput = document.getElementById('banCustomReason');
+            if (e.target.value === 'Custom') {
+                customInput.classList.remove('hidden');
+            } else {
+                customInput.classList.add('hidden');
+            }
+        });
+
+        document.getElementById('banLengthSelect').addEventListener('change', (e) => {
+            const customInput = document.getElementById('banCustomLength');
+            if (e.target.value === 'Custom') {
+                customInput.classList.remove('hidden');
+            } else {
+                customInput.classList.add('hidden');
+            }
+        });
+
+        document.getElementById('warnReasonSelect').addEventListener('change', (e) => {
+            const customInput = document.getElementById('warnCustomReason');
+            if (e.target.value === 'Custom') {
+                customInput.classList.remove('hidden');
+            } else {
+                customInput.classList.add('hidden');
+            }
+        });
+
+        // This function now simulates an async API call to a backend
+        async function lookupRobloxId(username) {
+            try {
+                // Here is where you would make a real API call to your backend
+                // The backend would then securely call the Roblox API
+                const response = await fetch(`/api/roblox-id?username=${username}`);
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const data = await response.json();
+                return data.robloxId;
+            } catch (error) {
+                console.error("Error looking up Roblox ID:", error);
+                // Fallback to mock data if the real API call fails
+                return mockRobloxIds[username.toLowerCase()] || null;
+            }
+        }
+        
+        // Event listeners for username input fields
+        document.getElementById('banUsername').addEventListener('input', async (e) => {
+            const robloxId = await lookupRobloxId(e.target.value);
+            document.getElementById('banRobloxId').value = robloxId || '';
+        });
+
+        document.getElementById('warnUsername').addEventListener('input', async (e) => {
+            const robloxId = await lookupRobloxId(e.target.value);
+            document.getElementById('warnRobloxId').value = robloxId || '';
+        });
+
+        document.getElementById('unbanUsername').addEventListener('input', async (e) => {
+            const robloxId = await lookupRobloxId(e.target.value);
+            document.getElementById('unbanRobloxId').value = robloxId || '';
+        });
+        
+        document.getElementById('manageUsername').addEventListener('input', async (e) => {
+            const robloxId = await lookupRobloxId(e.target.value);
+            document.getElementById('manageRobloxId').value = robloxId || '';
+        });
+
+        async function initFirebase() {
+            try {
+                if (!firebaseConfig) {
+                    throw new Error("Firebase config not found.");
+                }
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        const userId = user.uid;
+                        const defaultUsername = `Admin-${userId.substring(0, 4)}`;
+                        const username = user.displayName || defaultUsername;
+                        userUsernameEl.textContent = username;
+                        userPfpEl.src = user.photoURL || "https://placehold.co/48x48/1E1E1E/94a3b8?text=PFP";
+                        authStatusEl.textContent = 'Authenticated';
+                        authStatusEl.classList.remove('text-yellow-400');
+                        authStatusEl.classList.add('text-green-400');
+                        welcomeMessageEl.textContent = `Welcome, ${username}`;
+                        
+                        // Set up real-time listener for appeals
+                        const appealsRef = collection(db, `artifacts/${appId}/public/data/appeals`);
+                        onSnapshot(appealsRef, (snapshot) => {
+                            const appeals = [];
+                            snapshot.forEach(doc => {
+                                appeals.push({ id: doc.id, ...doc.data() });
+                            });
+                            displayAppeals(appeals);
+                        });
+                    } else {
+                        userUsernameEl.textContent = 'Not logged in';
+                        authStatusEl.textContent = 'Anonymous';
+                        authStatusEl.classList.remove('text-yellow-400');
+                        authStatusEl.classList.add('text-gray-400');
+                    }
+                });
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+            } catch (error) {
+                console.error("Firebase auth error:", error);
+                authStatusEl.innerHTML = 'Authentication Failed';
+                authStatusEl.classList.remove('text-yellow-400');
+                authStatusEl.classList.add('text-red-400');
+            }
+        }
+
+        function showMessage(text, isError = false) {
+            messageContainer.textContent = text;
+            messageContainer.className = `mt-4 text-center text-sm ${isError ? 'text-red-400' : 'text-green-400'}`;
+        }
+
+        function showModal(title, message, showInput, onConfirm) {
+            modalContainer.classList.remove('hidden');
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            if (showInput) {
+                modalInput.classList.remove('hidden');
+                modalInput.value = '';
+            } else {
+                modalInput.classList.add('hidden');
+            }
+
+            const confirmHandler = () => {
+                onConfirm(modalInput.value);
+                modalContainer.classList.add('hidden');
+                modalConfirmButton.removeEventListener('click', confirmHandler);
+                modalCancelButton.removeEventListener('click', cancelHandler);
+            };
+
+            const cancelHandler = () => {
+                modalContainer.classList.add('hidden');
+                modalConfirmButton.removeEventListener('click', confirmHandler);
+                modalCancelButton.removeEventListener('click', cancelHandler);
+            };
+
+            modalConfirmButton.addEventListener('click', confirmHandler);
+            modalCancelButton.addEventListener('click', cancelHandler);
+        }
+
+        navButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                navButtons.forEach(btn => btn.classList.remove('bg-gray-700'));
+                button.classList.add('bg-gray-700');
+
+                panels.forEach(panel => panel.classList.add('hidden'));
+                
+                // Fixed logic to correctly get the panel ID
+                const targetPanelId = `panel-${button.id.substring(4)}`;
+                const targetPanel = document.getElementById(targetPanelId);
+                
+                // Add a check to ensure the panel exists before trying to access its classList
+                if (targetPanel) {
+                    targetPanel.classList.remove('hidden');
+                } else {
+                    console.error(`Error: Could not find panel with ID: ${targetPanelId}`);
+                }
+            });
+        });
+
+        openPanelButton.addEventListener('click', () => {
+            panelWelcome.classList.add('hidden');
+            panelAdmin.classList.remove('hidden');
+            sidebar.classList.remove('hidden');
+        });
+
+        function displayLookupResults(data) {
+            lookupResultsEl.innerHTML = `
+                <div class="bg-[#1E1E1E] p-6 rounded-lg space-y-4">
+                    <h2 class="text-xl font-bold text-gray-100">Player Data</h2>
+                    <div>
+                        <p class="text-sm font-medium text-gray-400">Roblox Username:</p>
+                        <p class="text-base text-gray-300">${data.username}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-400">Roblox ID:</p>
+                        <p class="text-base text-gray-300">${data.robloxId}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-400">Money:</p>
+                        <p class="text-base text-gray-300">$${data.money}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-400">Time Played:</p>
+                        <p class="text-base text-gray-300">${data.timePlayed}</p>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-400">Team XP:</p>
+                        <ul class="list-disc list-inside ml-4">
+                            ${Object.entries(data.xp).map(([team, xp]) => `<li class="text-base text-gray-300">${team}: ${xp} XP</li>`).join('')}
+                        </ul>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-400">Past Moderation History:</p>
+                        ${data.moderationHistory.length > 0 ? 
+                            `<ul class="list-disc list-inside ml-4">
+                                ${data.moderationHistory.map(mod => `<li class="text-sm text-gray-300"><strong>${mod.action}</strong> by ${mod.moderator} for "${mod.reason}" on ${new Date(mod.timestamp).toLocaleDateString()}</li>`).join('')}
+                            </ul>` : `<p class="text-base text-gray-500">No moderation history found.</p>`
+                        }
+                    </div>
+                </div>
+            `;
+        }
+
+        function displayAppeals(appeals) {
+            appealsContainer.innerHTML = appeals.length === 0 ? `<p class="text-center text-gray-500 italic">No active appeals at this time.</p>` : '';
+            appeals.forEach(appeal => {
+                const appealCard = document.createElement('div');
+                appealCard.className = 'bg-[#1E1E1E] p-6 rounded-lg shadow-md space-y-4';
+                appealCard.innerHTML = `
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xl font-bold text-gray-100">${appeal.robloxUsername}</h3>
+                        <p class="text-sm text-gray-400">ID: ${appeal.robloxId}</p>
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <p class="text-sm font-medium text-gray-400">What were you banned for?</p>
+                            <p class="text-base text-gray-300">${appeal.answers.bannedFor}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-400">Why should you be unbanned?</p>
+                            <p class="text-base text-gray-300">${appeal.answers.whyUnban}</p>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-400">How will you act if you unbanned?</p>
+                            <p class="text-base text-gray-300">${appeal.answers.howAct}</p>
+                        </div>
+                    </div>
+                    <div class="flex space-x-2 mt-4">
+                        <button class="accept-appeal-btn w-full px-4 py-2 bg-green-600 rounded-lg text-white font-bold hover:bg-green-700 transition-colors duration-200" data-id="${appeal.id}">
+                            Accept
+                        </button>
+                        <button class="deny-appeal-btn w-full px-4 py-2 bg-red-600 rounded-lg text-white font-bold hover:bg-red-700 transition-colors duration-200" data-id="${appeal.id}">
+                            Deny
+                        </button>
+                    </div>
+                `;
+                appealsContainer.appendChild(appealCard);
+            });
+
+            document.querySelectorAll('.accept-appeal-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const appealId = e.target.dataset.id;
+                    await acceptAppeal(appealId);
+                });
+            });
+
+            document.querySelectorAll('.deny-appeal-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const appealId = e.target.dataset.id;
+                    showModal('Deny Appeal', 'Please provide a reason for denying this appeal:', true, async (reason) => {
+                        await denyAppeal(appealId, reason);
+                    });
+                });
+            });
+        }
+
+        async function acceptAppeal(appealId) {
+            showMessage('Accepting appeal... This may take a moment.');
+            const appealRef = doc(db, `artifacts/${appId}/public/data/appeals`, appealId);
+            const unbanRequestsRef = collection(db, `artifacts/${appId}/public/data/unban_requests`);
+            try {
+                // Update the appeal status
+                await updateDoc(appealRef, {
+                    status: 'accepted',
+                    moderatorId: auth.currentUser.uid,
+                    moderatorName: auth.currentUser.displayName || "Admin",
+                    decisionTimestamp: Date.now()
+                });
+                // Add a new document to the unban requests collection to trigger unban in-game
+                await addDoc(unbanRequestsRef, {
+                    appealId: appealId,
+                    moderatorId: auth.currentUser.uid,
+                    decisionTimestamp: Date.now(),
+                    status: 'accepted'
+                });
+                showMessage('Appeal accepted successfully!');
+            } catch (e) {
+                console.error("Error accepting appeal: ", e);
+                showMessage('Failed to accept appeal. Check the console.', true);
+            }
+        }
+
+        async function denyAppeal(appealId, reason) {
+            showMessage('Denying appeal...');
+            if (!reason) {
+                showMessage('Denial reason is required.', true);
+                return;
+            }
+            const appealRef = doc(db, `artifacts/${appId}/public/data/appeals`, appealId);
+            try {
+                await updateDoc(appealRef, {
+                    status: 'denied',
+                    moderatorId: auth.currentUser.uid,
+                    moderatorName: auth.currentUser.displayName || "Admin",
+                    denialReason: reason,
+                    decisionTimestamp: Date.now()
+                });
+                showMessage('Appeal denied successfully!');
+            } catch (e) {
+                console.error("Error denying appeal: ", e);
+                showMessage('Failed to deny appeal. Check the console.', true);
+            }
+        }
+
+        async function getModerationHistory(robloxId) {
+            if (!robloxId || !db) return [];
+            
+            const history = [];
+            
+            // Query for bans
+            const banQuery = query(collection(db, `artifacts/${appId}/public/data/ban_requests`), where("targetRobloxId", "==", robloxId));
+            const banSnapshot = await getDocs(banQuery);
+            banSnapshot.forEach(doc => {
+                history.push({ action: 'Ban', ...doc.data() });
+            });
+            
+            // Query for warns
+            const warnQuery = query(collection(db, `artifacts/${appId}/public/data/warn_requests`), where("targetRobloxId", "==", robloxId));
+            const warnSnapshot = await getDocs(warnQuery);
+            warnSnapshot.forEach(doc => {
+                history.push({ action: 'Warn', ...doc.data() });
+            });
+            
+            // Sort history by timestamp (most recent first)
+            history.sort((a, b) => b.timestamp - a.timestamp);
+            
+            return history;
+        }
+
+        function displayModerationHistory(history) {
+            if (history.length === 0) {
+                unbanModerationHistoryEl.innerHTML = `<p class="text-center text-gray-500 italic">No moderation history found for this player.</p>`;
+                return;
+            }
+
+            unbanModerationHistoryEl.innerHTML = history.map(mod => `
+                <div class="border-b border-gray-700 last:border-b-0 py-2">
+                    <p class="font-bold text-gray-100">${mod.action} by ${mod.moderatorName}</p>
+                    <p class="text-sm text-gray-400">Reason: "${mod.reason}"</p>
+                    <p class="text-xs text-gray-500">${new Date(mod.timestamp).toLocaleString()}</p>
+                </div>
+            `).join('');
+        }
+
+        // Add event listener to the Roblox ID input in the Unban form
+        const unbanRobloxIdInput = document.getElementById('unbanRobloxId');
+        unbanRobloxIdInput.addEventListener('change', async (e) => {
+            const robloxId = e.target.value;
+            if (robloxId) {
+                unbanModerationHistoryEl.innerHTML = `<p class="text-center text-gray-500 italic">Loading history...</p>`;
+                const history = await getModerationHistory(robloxId);
+                displayModerationHistory(history);
+            } else {
+                unbanModerationHistoryEl.innerHTML = `<p class="text-center text-gray-500 italic">Enter a Roblox ID to view moderation history.</p>`;
+            }
+        });
+
+        function validateForm(form) {
+            let isValid = true;
+            const requiredInputs = form.querySelectorAll('[required]');
+            requiredInputs.forEach(input => {
+                // If the field is hidden and not a select, skip it.
+                if (input.classList.contains('hidden')) {
+                    return;
+                }
+                if (input.value.trim() === '') {
+                    input.classList.add('shake');
+                    setTimeout(() => input.classList.remove('shake'), 500);
+                    isValid = false;
+                }
+            });
+            return isValid;
+        }
+
+        async function handleFormSubmit(e, type) {
+            e.preventDefault();
+            const form = e.target;
+            
+            if (!validateForm(form)) {
+                showMessage('Please fill in all required fields.', true);
+                return;
+            }
+
+            const button = form.querySelector('button');
+            const formType = form.id.replace('-form', '');
+
+            button.textContent = 'Processing...';
+            button.disabled = true;
+            showMessage('');
+
+            let username, robloxId, reason, notes, banLength;
+            
+            if (type === 'ban') {
+                username = form.querySelector('input[name="username"]').value;
+                robloxId = form.querySelector('input[name="robloxId"]').value;
+                
+                const selectedReason = form.querySelector('select[name="reason"]').value;
+                reason = selectedReason === 'Custom' ? form.querySelector('#banCustomReason').value : selectedReason;
+                
+                const selectedLength = form.querySelector('select[name="banLength"]').value;
+                banLength = selectedLength === 'Custom' ? form.querySelector('#banCustomLength').value : selectedLength;
+                
+                notes = form.querySelector('textarea[name="notes"]').value;
+
+            } else if (type === 'warn') {
+                username = form.querySelector('input[name="username"]').value;
+                robloxId = form.querySelector('input[name="robloxId"]').value;
+
+                const selectedReason = form.querySelector('select[name="reason"]').value;
+                reason = selectedReason === 'Custom' ? form.querySelector('#warnCustomReason').value : selectedReason;
+                
+                notes = form.querySelector('textarea[name="notes"]').value;
+
+            } else if (type === 'unban') {
+                username = form.querySelector('input[name="username"]').value;
+                robloxId = form.querySelector('input[name="robloxId"]').value;
+                reason = form.querySelector('textarea[name="unbanReason"]').value;
+            } else if (type === 'lookup') {
+                username = form.querySelector('input[name="username"]').value;
+                robloxId = form.querySelector('input[name="robloxId"]').value;
+            } else if (type === 'manage_data') {
+                const dataType = form.querySelector('select[name="dataType"]').value;
+                const dataAmount = form.querySelector('input[name="dataAmount"]').value;
+                const dataAction = form.querySelector('select[name="dataAction"]').value;
+                
+                const amount = parseInt(dataAmount, 10);
+                if (isNaN(amount) || amount <= 0) {
+                    showMessage('Please enter a valid positive number for the amount.', true);
+                    button.disabled = false;
+                    button.textContent = 'MANAGE DATA';
+                    return;
+                }
+
+                const data = {
+                    targetUsername: form.querySelector('input[name="username"]').value,
+                    targetRobloxId: form.querySelector('input[name="robloxId"]').value,
+                    dataType: dataType,
+                    dataAmount: amount,
+                    dataAction: dataAction,
+                    moderatorId: auth.currentUser?.uid || 'anonymous',
+                    moderatorName: auth.currentUser?.displayName || "Admin",
+                    timestamp: Date.now()
+                };
+                
+                if (!auth || !db) {
+                    showMessage('Database not ready. Please wait.', true);
+                    button.disabled = false;
+                    button.textContent = 'MANAGE DATA';
+                    return;
+                }
+
+                try {
+                    const requestsRef = collection(db, `artifacts/${appId}/public/data/manage_data_requests`);
+                    await addDoc(requestsRef, data);
+                    showMessage(`Manage Data request for ${dataType} sent successfully!`);
+                    form.reset();
+                } catch (e) {
+                    console.error("Error adding manage data request: ", e);
+                    showMessage("Failed to send manage data request. Check the console.", true);
+                } finally {
+                    button.disabled = false;
+                    button.textContent = 'MANAGE DATA';
+                }
+                return;
+            }
+
+            if (!auth || !db) {
+                showMessage('Database not ready. Please wait.', true);
+                button.disabled = false;
+                button.textContent = type.toUpperCase();
+                return;
+            }
+
+            if (type === 'unban') {
+                const history = await getModerationHistory(robloxId);
+                const isBanned = history.some(mod => mod.action === 'Ban');
+                if (!isBanned) {
+                    showMessage('Cannot unban a player who is not currently banned.', true);
+                    button.disabled = false;
+                    button.textContent = 'UNBAN';
+                    return;
+                }
+            }
+
+            const userId = auth.currentUser?.uid || 'anonymous';
+            const requestCollection = `${type}_requests`;
+            const requestsRef = collection(db, `artifacts/${appId}/public/data/${requestCollection}`);
+            
+            const data = {
+                targetUsername: username,
+                targetRobloxId: robloxId,
+                reason: reason,
+                moderatorId: userId,
+                moderatorName: auth.currentUser?.displayName || "Admin",
+                timestamp: Date.now()
+            };
+
+            if (type === 'ban') {
+                data.notes = notes;
+                data.banLength = banLength;
+                data.banAlts = form.querySelector('input[name="banAlts"]').checked;
+            } else if (type === 'warn') {
+                 data.notes = notes;
+            } else if (type === 'lookup') {
+                // This is where you would call a Roblox API or your backend to get player data
+                // For now, we'll use mock data
+                showMessage('Looking up player data...');
+                setTimeout(() => {
+                    const mockData = {
+                        username: username,
+                        robloxId: robloxId || '920915908',
+                        money: 12500,
+                        timePlayed: '45 hours',
+                        xp: {
+                            'Fire Department': 500,
+                            'DOT': 120,
+                            'Police Department': 850,
+                            'Sheriff': 210
+                        },
+                        moderationHistory: [
+                            { action: 'Ban', reason: 'Exploiting', moderator: 'Admin-5d9c', timestamp: 1678886400000 },
+                            { action: 'Warn', reason: 'Spamming', moderator: 'Admin-a2b1', timestamp: 1681564800000 }
+                        ]
+                    };
+                    displayLookupResults(mockData);
+                    showMessage('Player data found!');
+                    button.disabled = false;
+                    button.textContent = type.toUpperCase();
+                }, 1000);
+                return;
+            }
+
+            try {
+                await addDoc(requestsRef, data);
+                showMessage(`${type.charAt(0).toUpperCase() + type.slice(1)} request sent successfully!`);
+                form.reset();
+                const customReasonInput = document.getElementById(`${type}CustomReason`);
+                const customLengthInput = document.getElementById(`${type}CustomLength`);
+                if (customReasonInput) customReasonInput.classList.add('hidden');
+                if (customLengthInput) customLengthInput.classList.add('hidden');
+            } catch (e) {
+                console.error(`Error adding ${type} request: `, e);
+                showMessage(`Failed to send ${type} request. Check the console.`, true);
+            } finally {
+                button.disabled = false;
+                button.textContent = type.toUpperCase();
+            }
+        }
+
+        banForm.addEventListener('submit', (e) => handleFormSubmit(e, 'ban'));
+        warnForm.addEventListener('submit', (e) => handleFormSubmit(e, 'warn'));
+        unbanForm.addEventListener('submit', (e) => handleFormSubmit(e, 'unban'));
+        lookupForm.addEventListener('submit', (e) => handleFormSubmit(e, 'lookup'));
+        manageDataForm.addEventListener('submit', (e) => handleFormSubmit(e, 'manage_data'));
+
+        initFirebase();
+    </script>
+</body>
+</html>
