@@ -20,12 +20,12 @@ try {
   process.exit(1);
 }
 
-const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
-const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const GUILD_ID = process.env.DISCORD_GUILD_ID;
+const CLIENT_ID = process.env.1416153025180991555;
+const CLIENT_SECRET = process.env.-F_yRNc-zGlb3UaoYEoao0OdyqwCNTkx;
+const GUILD_ID = process.env.1412103251574394900;
 
 // Parse the comma-separated string of required role IDs into an array
-const REQUIRED_ROLE_IDS = process.env.DISCORD_REQUIRED_ROLE_IDS ? process.env.DISCORD_REQUIRED_ROLE_IDS.split(',').map(id => id.trim()) : [];
+const REQUIRED_ROLE_IDS = process.env.1412131096690430074 ? process.env.1412136245324419152.split(',').map(id => id.trim()) : [];
 
 const REDIRECT_URI = 'http://localhost:3000/auth/discord/callback';
 
