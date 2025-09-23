@@ -60,11 +60,9 @@
         <!-- Welcome Panel -->
         <div id="panel-welcome" class="text-center transform transition-all duration-500">
             <h1 id="welcome-message" class="text-5xl font-bold text-gray-100 mb-8">Welcome, Loading...</h1>
-            <a href="YOUR_BACKEND_URL/auth/discord">
-                <button id="open-panel-button" class="px-8 py-4 rounded-full text-white font-semibold text-lg transition-colors duration-200 shadow-lg bg-blue-600 hover:bg-blue-700 hover:shadow-xl hover:shadow-blue-500/50">
-                    Login with Discord
-                </button>
-            </a>
+            <button id="login-button" class="px-8 py-4 rounded-full text-white font-semibold text-lg transition-colors duration-200 shadow-lg bg-blue-600 hover:bg-blue-700 hover:shadow-xl hover:shadow-blue-500/50">
+                Login with Discord
+            </button>
         </div>
 
         <!-- Admin Panel -->
@@ -351,6 +349,7 @@
         const panelAdmin = document.getElementById('panel-admin');
         const panels = document.querySelectorAll('.panel');
 
+        const loginButton = document.getElementById('login-button');
         const banForm = document.getElementById('ban-form');
         const warnForm = document.getElementById('warn-form');
         const unbanForm = document.getElementById('unban-form');
@@ -375,6 +374,11 @@
             'johnsmith': '123456789',
             'janedoe': '987654321'
         };
+
+        loginButton.addEventListener('click', () => {
+            console.log("Mock login button clicked. For a real app, this would redirect to your backend for Discord OAuth.");
+            showMessage("Mock login: Connect to your backend for a real user experience.", false);
+        });
 
         // Event listeners for showing/hiding custom input fields
         document.getElementById('banReasonSelect').addEventListener('change', (e) => {
@@ -449,15 +453,16 @@
                         signInWithCustomToken(auth, customToken).catch(error => {
                             console.error("Custom token sign-in failed:", error);
                             welcomeMessageEl.textContent = 'Login Failed';
-                            document.getElementById('open-panel-button').textContent = 'Try Again';
-                            document.getElementById('open-panel-button').href = 'YOUR_BACKEND_URL/auth/discord';
+                            document.getElementById('login-button').textContent = 'Try Again';
+                            // Keeping this href for potential future use with a real backend
+                            // document.getElementById('login-button').href = 'YOUR_BACKEND_URL/auth/discord';
                         });
                         window.history.replaceState({}, document.title, window.location.pathname);
                     } catch (error) {
                         console.error("Custom token sign-in failed:", error);
                         welcomeMessageEl.textContent = 'Login Failed';
-                        document.getElementById('open-panel-button').textContent = 'Try Again';
-                        document.getElementById('open-panel-button').href = 'YOUR_BACKEND_URL/auth/discord';
+                        document.getElementById('login-button').textContent = 'Try Again';
+                        // document.getElementById('login-button').href = 'YOUR_BACKEND_URL/auth/discord';
                         return; // Stop execution if auth fails
                     }
                 }
