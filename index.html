@@ -60,9 +60,11 @@
         <!-- Welcome Panel -->
         <div id="panel-welcome" class="text-center transform transition-all duration-500">
             <h1 id="welcome-message" class="text-5xl font-bold text-gray-100 mb-8">Welcome, Loading...</h1>
-            <button id="open-panel-button" class="px-8 py-4 rounded-full text-white font-semibold text-lg transition-colors duration-200 shadow-lg bg-blue-600 hover:bg-blue-700 hover:shadow-xl hover:shadow-blue-500/50">
-                Open Panel
-            </button>
+            <a href="YOUR_BACKEND_URL/auth/discord">
+                <button id="open-panel-button" class="px-8 py-4 rounded-full text-white font-semibold text-lg transition-colors duration-200 shadow-lg bg-blue-600 hover:bg-blue-700 hover:shadow-xl hover:shadow-blue-500/50">
+                    Login with Discord
+                </button>
+            </a>
         </div>
 
         <!-- Admin Panel -->
@@ -330,16 +332,15 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, doc, setDoc, updateDoc, onSnapshot, query, where, getDocs, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, doc, updateDoc, onSnapshot, query, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // setLogLevel('Debug');
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-        let db, auth;
+        let db, auth, isAuthReady = false;
         const sidebar = document.getElementById('sidebar');
         const userUsernameEl = document.getElementById('user-username');
         const authStatusEl = document.getElementById('auth-status');
@@ -347,7 +348,6 @@
 
         const panelWelcome = document.getElementById('panel-welcome');
         const welcomeMessageEl = document.getElementById('welcome-message');
-        const openPanelButton = document.getElementById('open-panel-button');
         const panelAdmin = document.getElementById('panel-admin');
         const panels = document.querySelectorAll('.panel');
 
@@ -409,7 +409,7 @@
             try {
                 // Here is where you would make a real API call to your backend
                 // The backend would then securely call the Roblox API
-                const response = await fetch(`/api/roblox-id?username=${username}`);
+                const response = await fetch(`YOUR_BACKEND_URL/api/roblox-id?username=${username}`);
                 if (!response.ok) {
                     throw new Error('Network response was not ok');
                 }
@@ -443,7 +443,8 @@
             document.getElementById('manageRobloxId').value = robloxId || '';
         });
 
-        async function initFirebase() {
+        // Initialize Firebase and set up a listener for auth state changes
+        function initFirebase() {
             try {
                 if (!firebaseConfig) {
                     throw new Error("Firebase config not found.");
@@ -452,18 +453,51 @@
                 auth = getAuth(app);
                 db = getFirestore(app);
 
+                // Check for a custom token in the URL
+                const urlParams = new URLSearchParams(window.location.search);
+                const customToken = urlParams.get('token');
+                
+                if (customToken) {
+                    try {
+                        signInWithCustomToken(auth, customToken).catch(error => {
+                            console.error("Custom token sign-in failed:", error);
+                            welcomeMessageEl.textContent = 'Login Failed';
+                            document.getElementById('open-panel-button').textContent = 'Try Again';
+                            document.getElementById('open-panel-button').href = 'YOUR_BACKEND_URL/auth/discord';
+                        });
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                    } catch (error) {
+                        console.error("Custom token sign-in failed:", error);
+                        welcomeMessageEl.textContent = 'Login Failed';
+                        document.getElementById('open-panel-button').textContent = 'Try Again';
+                        document.getElementById('open-panel-button').href = 'YOUR_BACKEND_URL/auth/discord';
+                        return; // Stop execution if auth fails
+                    }
+                }
+
+                // Attach auth state change listener
                 onAuthStateChanged(auth, async (user) => {
                     if (user) {
+                        // Display user info
                         const userId = user.uid;
                         const defaultUsername = `Admin-${userId.substring(0, 4)}`;
-                        const username = user.displayName || defaultUsername;
+                        
+                        const idTokenResult = await user.getIdTokenResult();
+                        const claims = idTokenResult.claims;
+                        const username = claims.username || defaultUsername;
+                        const pfpUrl = claims.avatar ? `https://cdn.discordapp.com/avatars/${claims.discordId}/${claims.avatar}.png` : "https://placehold.co/48x48/1E1E1E/94a3b8?text=PFP";
+
                         userUsernameEl.textContent = username;
-                        userPfpEl.src = user.photoURL || "https://placehold.co/48x48/1E1E1E/94a3b8?text=PFP";
+                        userPfpEl.src = pfpUrl;
                         authStatusEl.textContent = 'Authenticated';
                         authStatusEl.classList.remove('text-yellow-400');
                         authStatusEl.classList.add('text-green-400');
                         welcomeMessageEl.textContent = `Welcome, ${username}`;
                         
+                        panelWelcome.classList.add('hidden');
+                        panelAdmin.classList.remove('hidden');
+                        sidebar.classList.remove('hidden');
+
                         // Set up real-time listener for appeals
                         const appealsRef = collection(db, `artifacts/${appId}/public/data/appeals`);
                         onSnapshot(appealsRef, (snapshot) => {
@@ -473,19 +507,21 @@
                             });
                             displayAppeals(appeals);
                         });
+
                     } else {
+                        // User is not signed in
                         userUsernameEl.textContent = 'Not logged in';
                         authStatusEl.textContent = 'Anonymous';
                         authStatusEl.classList.remove('text-yellow-400');
                         authStatusEl.classList.add('text-gray-400');
+                        panelWelcome.classList.remove('hidden');
+                        panelAdmin.classList.add('hidden');
+                        sidebar.classList.add('hidden');
                     }
+                    // Signal that auth state is ready regardless of login status
+                    isAuthReady = true;
+                    setupEventListeners();
                 });
-
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
 
             } catch (error) {
                 console.error("Firebase auth error:", error);
@@ -495,6 +531,384 @@
             }
         }
 
+        // --- Database Functions ---
+
+        async function logAction(action, data) {
+            if (!db || !auth.currentUser) {
+                showMessage("Database not ready. Please wait.", true);
+                return;
+            }
+            try {
+                const logsCollection = collection(db, `artifacts/${appId}/public/data/logs`);
+                const moderatorId = auth.currentUser.uid;
+                await addDoc(logsCollection, {
+                    ...data,
+                    action,
+                    moderatorId,
+                    timestamp: new Date()
+                });
+                showMessage(`Action "${action}" for ${data.username} logged successfully!`, false);
+            } catch (e) {
+                console.error("Error adding document: ", e);
+                showMessage("Failed to log action. Please check the console.", true);
+            }
+        }
+
+        // --- Form Submission Handlers ---
+        function setupEventListeners() {
+            banForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!isAuthReady || !auth.currentUser) {
+                    showMessage("Authentication not ready. Please try again.", true);
+                    return;
+                }
+                const form = e.target;
+                const requiredInputs = [
+                    document.getElementById('banUsername'),
+                    document.getElementById('banReasonSelect'),
+                    document.getElementById('banLengthSelect')
+                ];
+                let isValid = true;
+                requiredInputs.forEach(input => {
+                    if (input.value.trim() === '') {
+                        input.classList.add('shake');
+                        setTimeout(() => input.classList.remove('shake'), 500);
+                        isValid = false;
+                    }
+                });
+                const customReason = document.getElementById('banCustomReason');
+                if (document.getElementById('banReasonSelect').value === 'Custom' && customReason.value.trim() === '') {
+                    customReason.classList.add('shake');
+                    setTimeout(() => customReason.classList.remove('shake'), 500);
+                    isValid = false;
+                }
+                const customLength = document.getElementById('banCustomLength');
+                if (document.getElementById('banLengthSelect').value === 'Custom' && customLength.value.trim() === '') {
+                    customLength.classList.add('shake');
+                    setTimeout(() => customLength.classList.remove('shake'), 500);
+                    isValid = false;
+                }
+                if (!isValid) {
+                    showMessage('Please fill in all required fields.', true);
+                    return;
+                }
+                const username = form.username.value.trim();
+                const robloxId = form.robloxId.value.trim();
+                const reasonSelect = form.banReasonSelect.value;
+                const reason = reasonSelect === 'Custom' ? form.banCustomReason.value.trim() : reasonSelect;
+                const banLengthSelect = form.banLengthSelect.value;
+                const banLength = banLengthSelect === 'Custom' ? form.banCustomLength.value.trim() : banLengthSelect;
+                const notes = form.banNotes.value.trim();
+
+                const banData = {
+                    username,
+                    robloxId,
+                    reason,
+                    banLength,
+                    notes,
+                    moderator: auth.currentUser.displayName || auth.currentUser.uid,
+                    timestamp: new Date().toISOString()
+                };
+
+                // The next step would be to call your Roblox API with this data.
+                // For this example, we'll just log it to Firestore.
+                await logAction('ban', banData);
+                banForm.reset();
+            });
+
+            warnForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!isAuthReady || !auth.currentUser) {
+                    showMessage("Authentication not ready. Please try again.", true);
+                    return;
+                }
+                const form = e.target;
+                const requiredInputs = [
+                    document.getElementById('warnUsername'),
+                    document.getElementById('warnReasonSelect')
+                ];
+                let isValid = true;
+                requiredInputs.forEach(input => {
+                    if (input.value.trim() === '') {
+                        input.classList.add('shake');
+                        setTimeout(() => input.classList.remove('shake'), 500);
+                        isValid = false;
+                    }
+                });
+                const customReason = document.getElementById('warnCustomReason');
+                if (document.getElementById('warnReasonSelect').value === 'Custom' && customReason.value.trim() === '') {
+                    customReason.classList.add('shake');
+                    setTimeout(() => customReason.classList.remove('shake'), 500);
+                    isValid = false;
+                }
+                if (!isValid) {
+                    showMessage('Please fill in all required fields.', true);
+                    return;
+                }
+                const username = form.username.value.trim();
+                const robloxId = form.robloxId.value.trim();
+                const reasonSelect = form.warnReasonSelect.value;
+                const reason = reasonSelect === 'Custom' ? form.warnCustomReason.value.trim() : reasonSelect;
+                const notes = form.warnNotes.value.trim();
+                
+                const warnData = {
+                    username,
+                    robloxId,
+                    reason,
+                    notes,
+                    moderator: auth.currentUser.displayName || auth.currentUser.uid,
+                    timestamp: new Date().toISOString()
+                };
+                
+                // The next step would be to call your Roblox API with this data.
+                // For this example, we'll just log it to Firestore.
+                await logAction('warn', warnData);
+                warnForm.reset();
+            });
+
+            unbanForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!isAuthReady || !auth.currentUser) {
+                    showMessage("Authentication not ready. Please try again.", true);
+                    return;
+                }
+                const form = e.target;
+                const requiredInputs = [
+                    document.getElementById('unbanUsername'),
+                    document.getElementById('unbanReason')
+                ];
+                let isValid = true;
+                requiredInputs.forEach(input => {
+                    if (input.value.trim() === '') {
+                        input.classList.add('shake');
+                        setTimeout(() => input.classList.remove('shake'), 500);
+                        isValid = false;
+                    }
+                });
+                if (!isValid) {
+                    showMessage('Please fill in all required fields.', true);
+                    return;
+                }
+                const username = form.unbanUsername.value.trim();
+                const robloxId = form.unbanRobloxId.value.trim();
+                const reason = form.unbanReason.value.trim();
+
+                const unbanData = {
+                    username,
+                    robloxId,
+                    reason,
+                    moderator: auth.currentUser.displayName || auth.currentUser.uid,
+                    timestamp: new Date().toISOString()
+                };
+
+                const logsRef = collection(db, `artifacts/${appId}/public/data/logs`);
+                const q = query(logsRef, where("robloxId", "==", robloxId), where("action", "==", "ban"));
+                const querySnapshot = await getDocs(q);
+
+                if (querySnapshot.empty) {
+                    showMessage("User has no previous ban history. Cannot unban.", true);
+                    return;
+                }
+
+                // The next step would be to call your Roblox API with this data.
+                // For this example, we'll just log it to Firestore.
+                await logAction('unban', unbanData);
+                unbanForm.reset();
+                unbanModerationHistoryEl.innerHTML = `<p class="text-center text-gray-500 italic">Enter a Roblox ID to view moderation history.</p>`;
+            });
+
+            // Update moderation history on unban username/id change
+            document.getElementById('unbanUsername').addEventListener('input', async (e) => {
+                const username = e.target.value.trim();
+                const robloxId = document.getElementById('unbanRobloxId').value.trim();
+                const idToUse = robloxId || (username ? await lookupRobloxId(username) : null);
+                
+                if (idToUse) {
+                    displayUserModerationHistory(idToUse);
+                } else {
+                    unbanModerationHistoryEl.innerHTML = `<p class="text-center text-gray-500 italic">Enter a Roblox ID to view moderation history.</p>`;
+                }
+            });
+
+            document.getElementById('unbanRobloxId').addEventListener('input', async (e) => {
+                const robloxId = e.target.value.trim();
+                if (robloxId) {
+                    displayUserModerationHistory(robloxId);
+                } else {
+                    unbanModerationHistoryEl.innerHTML = `<p class="text-center text-gray-500 italic">Enter a Roblox ID to view moderation history.</p>`;
+                }
+            });
+
+            async function displayUserModerationHistory(robloxId) {
+                if (!isAuthReady || !db) {
+                    unbanModerationHistoryEl.innerHTML = `<p class="text-center text-red-500 italic">Error: Database not ready.</p>`;
+                    return;
+                }
+
+                const historyRef = collection(db, `artifacts/${appId}/public/data/logs`);
+                const q = query(historyRef, where("robloxId", "==", robloxId));
+                
+                unbanModerationHistoryEl.innerHTML = `<p class="text-center text-yellow-400 italic">Loading history...</p>`;
+                
+                try {
+                    const querySnapshot = await getDocs(q);
+                    const history = [];
+                    querySnapshot.forEach(doc => history.push(doc.data()));
+                    
+                    if (history.length > 0) {
+                        unbanModerationHistoryEl.innerHTML = history.map(log => `
+                            <div class="bg-gray-800 p-3 rounded-lg">
+                                <p class="text-sm font-semibold">${log.action.toUpperCase()} by ${log.moderator}</p>
+                                <p class="text-xs text-gray-400">Reason: "${log.reason}"</p>
+                                <p class="text-xs text-gray-400">Date: ${new Date(log.timestamp).toLocaleDateString()}</p>
+                                ${log.banLength ? `<p class="text-xs text-gray-400">Length: ${log.banLength}</p>` : ''}
+                            </div>
+                        `).join('');
+                    } else {
+                        unbanModerationHistoryEl.innerHTML = `<p class="text-center text-gray-500 italic">No moderation history found for this user.</p>`;
+                    }
+                } catch (error) {
+                    console.error("Error fetching history:", error);
+                    unbanModerationHistoryEl.innerHTML = `<p class="text-center text-red-500 italic">Error fetching history.</p>`;
+                }
+            }
+
+
+            lookupForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!isAuthReady || !auth.currentUser) {
+                    showMessage("Authentication not ready. Please try again.", true);
+                    return;
+                }
+                const form = e.target;
+                const username = form.lookupUsername.value.trim();
+                const robloxId = form.lookupRobloxId.value.trim();
+                
+                if (!username && !robloxId) {
+                    showMessage('Please enter a username or Roblox ID.', true);
+                    return;
+                }
+                
+                const idToLookup = robloxId || mockRobloxIds[username.toLowerCase()];
+                if (!idToLookup) {
+                    showMessage('Could not find a matching Roblox ID. Please try again.', true);
+                    return;
+                }
+                
+                // Mock data lookup - replace with a real API call to your Roblox API
+                const mockData = {
+                    username: username || "Player",
+                    robloxId: idToLookup,
+                    money: 1500,
+                    timePlayed: "25 hours",
+                    xp: {
+                        "Red Team": 500,
+                        "Blue Team": 750
+                    },
+                    moderationHistory: []
+                };
+
+                const logsRef = collection(db, `artifacts/${appId}/public/data/logs`);
+                const q = query(logsRef, where("robloxId", "==", idToLookup));
+                const querySnapshot = await getDocs(q);
+                
+                querySnapshot.forEach(doc => {
+                    mockData.moderationHistory.push(doc.data());
+                });
+
+                displayLookupResults(mockData);
+            });
+
+            manageDataForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!isAuthReady || !auth.currentUser) {
+                    showMessage("Authentication not ready. Please try again.", true);
+                    return;
+                }
+                const form = e.target;
+                const requiredInputs = [
+                    document.getElementById('manageUsername'),
+                    document.getElementById('dataAmount'),
+                    document.getElementById('dataType')
+                ];
+                let isValid = true;
+                requiredInputs.forEach(input => {
+                    if (input.value.trim() === '') {
+                        input.classList.add('shake');
+                        setTimeout(() => input.classList.remove('shake'), 500);
+                        isValid = false;
+                    }
+                });
+                if (!isValid) {
+                    showMessage('Please fill in all required fields.', true);
+                    return;
+                }
+                const username = form.manageUsername.value.trim();
+                const robloxId = form.manageRobloxId.value.trim();
+                const dataType = form.dataType.value;
+                const amount = form.dataAmount.value;
+                const action = form.dataAction.value;
+                
+                const data = {
+                    username,
+                    robloxId,
+                    dataType,
+                    amount,
+                    action,
+                    moderator: auth.currentUser.displayName || auth.currentUser.uid,
+                    timestamp: new Date().toISOString()
+                };
+                
+                // The next step would be to call your Roblox API with this data.
+                // For this example, we'll just log it to Firestore.
+                await logAction('manage_data', data);
+                manageDataForm.reset();
+            });
+            
+            // Appeal management event listeners
+            appealsContainer.addEventListener('click', async (e) => {
+                const target = e.target;
+                if (target.classList.contains('accept-appeal-btn')) {
+                    const appealId = target.dataset.id;
+                    if (!isAuthReady || !auth.currentUser) {
+                        showMessage("Authentication not ready. Please try again.", true);
+                        return;
+                    }
+                    showModal('Accept Appeal', 'Are you sure you want to accept this appeal? This will unban the user.', false, async () => {
+                        try {
+                            const appealDoc = doc(db, `artifacts/${appId}/public/data/appeals`, appealId);
+                            await updateDoc(appealDoc, { status: 'accepted', moderator: auth.currentUser.uid, timestamp: new Date().toISOString() });
+                            showMessage('Appeal accepted successfully.', false);
+                            // Optionally, call a Roblox API to unban the user
+                        } catch (e) {
+                            console.error("Error accepting appeal: ", e);
+                            showMessage("Failed to accept appeal.", true);
+                        }
+                    });
+                } else if (target.classList.contains('deny-appeal-btn')) {
+                    const appealId = target.dataset.id;
+                    if (!isAuthReady || !auth.currentUser) {
+                        showMessage("Authentication not ready. Please try again.", true);
+                        return;
+                    }
+                    showModal('Deny Appeal', 'Please enter a reason for denying this appeal.', true, async (denyReason) => {
+                        if (denyReason.trim() === '') {
+                            showMessage('Denial reason cannot be empty.', true);
+                            return;
+                        }
+                        try {
+                            const appealDoc = doc(db, `artifacts/${appId}/public/data/appeals`, appealId);
+                            await updateDoc(appealDoc, { status: 'denied', moderator: auth.currentUser.uid, reason: denyReason, timestamp: new Date().toISOString() });
+                            showMessage('Appeal denied successfully.', false);
+                        } catch (e) {
+                            console.error("Error denying appeal: ", e);
+                            showMessage("Failed to deny appeal.", true);
+                        }
+                    });
+                }
+            });
+        }
+        
         function showMessage(text, isError = false) {
             messageContainer.textContent = text;
             messageContainer.className = `mt-4 text-center text-sm ${isError ? 'text-red-400' : 'text-green-400'}`;
@@ -535,23 +949,15 @@
 
                 panels.forEach(panel => panel.classList.add('hidden'));
                 
-                // Fixed logic to correctly get the panel ID
                 const targetPanelId = `panel-${button.id.substring(4)}`;
                 const targetPanel = document.getElementById(targetPanelId);
                 
-                // Add a check to ensure the panel exists before trying to access its classList
                 if (targetPanel) {
                     targetPanel.classList.remove('hidden');
                 } else {
                     console.error(`Error: Could not find panel with ID: ${targetPanelId}`);
                 }
             });
-        });
-
-        openPanelButton.addEventListener('click', () => {
-            panelWelcome.classList.add('hidden');
-            panelAdmin.classList.remove('hidden');
-            sidebar.classList.remove('hidden');
         });
 
         function displayLookupResults(data) {
@@ -627,324 +1033,9 @@
                 `;
                 appealsContainer.appendChild(appealCard);
             });
-
-            document.querySelectorAll('.accept-appeal-btn').forEach(btn => {
-                btn.addEventListener('click', async (e) => {
-                    const appealId = e.target.dataset.id;
-                    await acceptAppeal(appealId);
-                });
-            });
-
-            document.querySelectorAll('.deny-appeal-btn').forEach(btn => {
-                btn.addEventListener('click', async (e) => {
-                    const appealId = e.target.dataset.id;
-                    showModal('Deny Appeal', 'Please provide a reason for denying this appeal:', true, async (reason) => {
-                        await denyAppeal(appealId, reason);
-                    });
-                });
-            });
         }
-
-        async function acceptAppeal(appealId) {
-            showMessage('Accepting appeal... This may take a moment.');
-            const appealRef = doc(db, `artifacts/${appId}/public/data/appeals`, appealId);
-            const unbanRequestsRef = collection(db, `artifacts/${appId}/public/data/unban_requests`);
-            try {
-                // Update the appeal status
-                await updateDoc(appealRef, {
-                    status: 'accepted',
-                    moderatorId: auth.currentUser.uid,
-                    moderatorName: auth.currentUser.displayName || "Admin",
-                    decisionTimestamp: Date.now()
-                });
-                // Add a new document to the unban requests collection to trigger unban in-game
-                await addDoc(unbanRequestsRef, {
-                    appealId: appealId,
-                    moderatorId: auth.currentUser.uid,
-                    decisionTimestamp: Date.now(),
-                    status: 'accepted'
-                });
-                showMessage('Appeal accepted successfully!');
-            } catch (e) {
-                console.error("Error accepting appeal: ", e);
-                showMessage('Failed to accept appeal. Check the console.', true);
-            }
-        }
-
-        async function denyAppeal(appealId, reason) {
-            showMessage('Denying appeal...');
-            if (!reason) {
-                showMessage('Denial reason is required.', true);
-                return;
-            }
-            const appealRef = doc(db, `artifacts/${appId}/public/data/appeals`, appealId);
-            try {
-                await updateDoc(appealRef, {
-                    status: 'denied',
-                    moderatorId: auth.currentUser.uid,
-                    moderatorName: auth.currentUser.displayName || "Admin",
-                    denialReason: reason,
-                    decisionTimestamp: Date.now()
-                });
-                showMessage('Appeal denied successfully!');
-            } catch (e) {
-                console.error("Error denying appeal: ", e);
-                showMessage('Failed to deny appeal. Check the console.', true);
-            }
-        }
-
-        async function getModerationHistory(robloxId) {
-            if (!robloxId || !db) return [];
-            
-            const history = [];
-            
-            // Query for bans
-            const banQuery = query(collection(db, `artifacts/${appId}/public/data/ban_requests`), where("targetRobloxId", "==", robloxId));
-            const banSnapshot = await getDocs(banQuery);
-            banSnapshot.forEach(doc => {
-                history.push({ action: 'Ban', ...doc.data() });
-            });
-            
-            // Query for warns
-            const warnQuery = query(collection(db, `artifacts/${appId}/public/data/warn_requests`), where("targetRobloxId", "==", robloxId));
-            const warnSnapshot = await getDocs(warnQuery);
-            warnSnapshot.forEach(doc => {
-                history.push({ action: 'Warn', ...doc.data() });
-            });
-            
-            // Sort history by timestamp (most recent first)
-            history.sort((a, b) => b.timestamp - a.timestamp);
-            
-            return history;
-        }
-
-        function displayModerationHistory(history) {
-            if (history.length === 0) {
-                unbanModerationHistoryEl.innerHTML = `<p class="text-center text-gray-500 italic">No moderation history found for this player.</p>`;
-                return;
-            }
-
-            unbanModerationHistoryEl.innerHTML = history.map(mod => `
-                <div class="border-b border-gray-700 last:border-b-0 py-2">
-                    <p class="font-bold text-gray-100">${mod.action} by ${mod.moderatorName}</p>
-                    <p class="text-sm text-gray-400">Reason: "${mod.reason}"</p>
-                    <p class="text-xs text-gray-500">${new Date(mod.timestamp).toLocaleString()}</p>
-                </div>
-            `).join('');
-        }
-
-        // Add event listener to the Roblox ID input in the Unban form
-        const unbanRobloxIdInput = document.getElementById('unbanRobloxId');
-        unbanRobloxIdInput.addEventListener('change', async (e) => {
-            const robloxId = e.target.value;
-            if (robloxId) {
-                unbanModerationHistoryEl.innerHTML = `<p class="text-center text-gray-500 italic">Loading history...</p>`;
-                const history = await getModerationHistory(robloxId);
-                displayModerationHistory(history);
-            } else {
-                unbanModerationHistoryEl.innerHTML = `<p class="text-center text-gray-500 italic">Enter a Roblox ID to view moderation history.</p>`;
-            }
-        });
-
-        function validateForm(form) {
-            let isValid = true;
-            const requiredInputs = form.querySelectorAll('[required]');
-            requiredInputs.forEach(input => {
-                // If the field is hidden and not a select, skip it.
-                if (input.classList.contains('hidden')) {
-                    return;
-                }
-                if (input.value.trim() === '') {
-                    input.classList.add('shake');
-                    setTimeout(() => input.classList.remove('shake'), 500);
-                    isValid = false;
-                }
-            });
-            return isValid;
-        }
-
-        async function handleFormSubmit(e, type) {
-            e.preventDefault();
-            const form = e.target;
-            
-            if (!validateForm(form)) {
-                showMessage('Please fill in all required fields.', true);
-                return;
-            }
-
-            const button = form.querySelector('button');
-            const formType = form.id.replace('-form', '');
-
-            button.textContent = 'Processing...';
-            button.disabled = true;
-            showMessage('');
-
-            let username, robloxId, reason, notes, banLength;
-            
-            if (type === 'ban') {
-                username = form.querySelector('input[name="username"]').value;
-                robloxId = form.querySelector('input[name="robloxId"]').value;
-                
-                const selectedReason = form.querySelector('select[name="reason"]').value;
-                reason = selectedReason === 'Custom' ? form.querySelector('#banCustomReason').value : selectedReason;
-                
-                const selectedLength = form.querySelector('select[name="banLength"]').value;
-                banLength = selectedLength === 'Custom' ? form.querySelector('#banCustomLength').value : selectedLength;
-                
-                notes = form.querySelector('textarea[name="notes"]').value;
-
-            } else if (type === 'warn') {
-                username = form.querySelector('input[name="username"]').value;
-                robloxId = form.querySelector('input[name="robloxId"]').value;
-
-                const selectedReason = form.querySelector('select[name="reason"]').value;
-                reason = selectedReason === 'Custom' ? form.querySelector('#warnCustomReason').value : selectedReason;
-                
-                notes = form.querySelector('textarea[name="notes"]').value;
-
-            } else if (type === 'unban') {
-                username = form.querySelector('input[name="username"]').value;
-                robloxId = form.querySelector('input[name="robloxId"]').value;
-                reason = form.querySelector('textarea[name="unbanReason"]').value;
-            } else if (type === 'lookup') {
-                username = form.querySelector('input[name="username"]').value;
-                robloxId = form.querySelector('input[name="robloxId"]').value;
-            } else if (type === 'manage_data') {
-                const dataType = form.querySelector('select[name="dataType"]').value;
-                const dataAmount = form.querySelector('input[name="dataAmount"]').value;
-                const dataAction = form.querySelector('select[name="dataAction"]').value;
-                
-                const amount = parseInt(dataAmount, 10);
-                if (isNaN(amount) || amount <= 0) {
-                    showMessage('Please enter a valid positive number for the amount.', true);
-                    button.disabled = false;
-                    button.textContent = 'MANAGE DATA';
-                    return;
-                }
-
-                const data = {
-                    targetUsername: form.querySelector('input[name="username"]').value,
-                    targetRobloxId: form.querySelector('input[name="robloxId"]').value,
-                    dataType: dataType,
-                    dataAmount: amount,
-                    dataAction: dataAction,
-                    moderatorId: auth.currentUser?.uid || 'anonymous',
-                    moderatorName: auth.currentUser?.displayName || "Admin",
-                    timestamp: Date.now()
-                };
-                
-                if (!auth || !db) {
-                    showMessage('Database not ready. Please wait.', true);
-                    button.disabled = false;
-                    button.textContent = 'MANAGE DATA';
-                    return;
-                }
-
-                try {
-                    const requestsRef = collection(db, `artifacts/${appId}/public/data/manage_data_requests`);
-                    await addDoc(requestsRef, data);
-                    showMessage(`Manage Data request for ${dataType} sent successfully!`);
-                    form.reset();
-                } catch (e) {
-                    console.error("Error adding manage data request: ", e);
-                    showMessage("Failed to send manage data request. Check the console.", true);
-                } finally {
-                    button.disabled = false;
-                    button.textContent = 'MANAGE DATA';
-                }
-                return;
-            }
-
-            if (!auth || !db) {
-                showMessage('Database not ready. Please wait.', true);
-                button.disabled = false;
-                button.textContent = type.toUpperCase();
-                return;
-            }
-
-            if (type === 'unban') {
-                const history = await getModerationHistory(robloxId);
-                const isBanned = history.some(mod => mod.action === 'Ban');
-                if (!isBanned) {
-                    showMessage('Cannot unban a player who is not currently banned.', true);
-                    button.disabled = false;
-                    button.textContent = 'UNBAN';
-                    return;
-                }
-            }
-
-            const userId = auth.currentUser?.uid || 'anonymous';
-            const requestCollection = `${type}_requests`;
-            const requestsRef = collection(db, `artifacts/${appId}/public/data/${requestCollection}`);
-            
-            const data = {
-                targetUsername: username,
-                targetRobloxId: robloxId,
-                reason: reason,
-                moderatorId: userId,
-                moderatorName: auth.currentUser?.displayName || "Admin",
-                timestamp: Date.now()
-            };
-
-            if (type === 'ban') {
-                data.notes = notes;
-                data.banLength = banLength;
-                data.banAlts = form.querySelector('input[name="banAlts"]').checked;
-            } else if (type === 'warn') {
-                 data.notes = notes;
-            } else if (type === 'lookup') {
-                // This is where you would call a Roblox API or your backend to get player data
-                // For now, we'll use mock data
-                showMessage('Looking up player data...');
-                setTimeout(() => {
-                    const mockData = {
-                        username: username,
-                        robloxId: robloxId || '920915908',
-                        money: 12500,
-                        timePlayed: '45 hours',
-                        xp: {
-                            'Fire Department': 500,
-                            'DOT': 120,
-                            'Police Department': 850,
-                            'Sheriff': 210
-                        },
-                        moderationHistory: [
-                            { action: 'Ban', reason: 'Exploiting', moderator: 'Admin-5d9c', timestamp: 1678886400000 },
-                            { action: 'Warn', reason: 'Spamming', moderator: 'Admin-a2b1', timestamp: 1681564800000 }
-                        ]
-                    };
-                    displayLookupResults(mockData);
-                    showMessage('Player data found!');
-                    button.disabled = false;
-                    button.textContent = type.toUpperCase();
-                }, 1000);
-                return;
-            }
-
-            try {
-                await addDoc(requestsRef, data);
-                showMessage(`${type.charAt(0).toUpperCase() + type.slice(1)} request sent successfully!`);
-                form.reset();
-                const customReasonInput = document.getElementById(`${type}CustomReason`);
-                const customLengthInput = document.getElementById(`${type}CustomLength`);
-                if (customReasonInput) customReasonInput.classList.add('hidden');
-                if (customLengthInput) customLengthInput.classList.add('hidden');
-            } catch (e) {
-                console.error(`Error adding ${type} request: `, e);
-                showMessage(`Failed to send ${type} request. Check the console.`, true);
-            } finally {
-                button.disabled = false;
-                button.textContent = type.toUpperCase();
-            }
-        }
-
-        banForm.addEventListener('submit', (e) => handleFormSubmit(e, 'ban'));
-        warnForm.addEventListener('submit', (e) => handleFormSubmit(e, 'warn'));
-        unbanForm.addEventListener('submit', (e) => handleFormSubmit(e, 'unban'));
-        lookupForm.addEventListener('submit', (e) => handleFormSubmit(e, 'lookup'));
-        manageDataForm.addEventListener('submit', (e) => handleFormSubmit(e, 'manage_data'));
-
-        initFirebase();
+        
+        window.onload = initFirebase;
     </script>
 </body>
 </html>
